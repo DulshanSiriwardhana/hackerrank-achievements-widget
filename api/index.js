@@ -13,102 +13,80 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
-async function fetchProfileHtml(username) {
-  const url = `https://www.hackerrank.com/${encodeURIComponent(username)}`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
-  });
-  if (!res.ok) throw new Error(`Failed to fetch profile (${res.status})`);
-  return await res.text();
-}
-
-function extractSkillsAndStats(html) {
-  const $ = cheerio.load(html);
-  const skills = {};
-  const stats = { stars: 0, badges: 0, certificates: 0 };
+async function fetchProfileData(username) {
+  const url = `https://www.hackerrank.com/rest/hackers/${encodeURIComponent(username)}/badges`;
+  const certUrl = `https://www.hackerrank.com/rest/hackers/${encodeURIComponent(username)}/certificates`;
   
-  $('text').each((_, el) => {
-    const text = $(el).text().toLowerCase();
-    if (text.includes('star')) {
-      const match = text.match(/(\d+)/);
-      if (match) stats.stars = parseInt(match[1]);
-    }
-  });
-  
-  return { skills, stats };
-}
-
-function parseBadgesAndCertificates(html) {
-  const $ = cheerio.load(html);
-  const badges = [];
-  const certificates = [];
-  const skills = new Set();
-
-  $("img").each((_, el) => {
-    const alt = $(el).attr("alt") || "";
-    const src = $(el).attr("src") || "";
-    const title = $(el).attr("title") || "";
-    
-    if (/badge/i.test(alt) || /badge/i.test(src)) {
-      const badgeTitle = title || alt.trim() || "Badge";
-      
-      let stars = 0;
-      const starMatch = badgeTitle.match(/(\d+)\s*star/i);
-      if (starMatch) stars = parseInt(starMatch[1]);
-      
-      badges.push({ 
-        title: badgeTitle, 
-        image: src,
-        stars: stars
-      });
-      
-      const skillMatch = badgeTitle.match(/^(.*?)\s*(?:\d+\s*star|badge)/i);
-      if (skillMatch) skills.add(skillMatch[1].trim());
-    }
-  });
-
-  $("a, div, span").each((_, el) => {
-    const text = $(el).text() || "";
-    const href = $(el).attr("href") || "";
-    const classList = $(el).attr("class") || "";
-    
-    if (/certificate/i.test(text) || /certificate/i.test(href) || /certificate/i.test(classList)) {
-      const certTitle = text.trim();
-      if (certTitle && certTitle.length > 3 && certTitle.length < 100) {
-        certificates.push({ 
-          title: certTitle, 
-          url: href,
-          verified: true,
-          type: certTitle.match(/\((.*?)\)/)?.[1] || 'SKILL'
-        });
+  const [badgesRes, certRes] = await Promise.all([
+    fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json"
       }
+    }),
+    fetch(certUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json"
+      }
+    })
+  ]);
+  
+  let badges = [];
+  let certificates = [];
+  
+  try {
+    if (badgesRes.ok) {
+      const badgesData = await badgesRes.json();
+      badges = badgesData.models || [];
     }
-  });
-
-  const uniq = (arr, key) => {
-    const seen = new Set();
-    return arr.filter((x) => {
-      const k = (x[key] || "").toLowerCase();
-      if (!k || seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-  };
-
-  return { 
-    badges: uniq(badges, "title"), 
-    certificates: uniq(certificates, "title"),
-    skills: Array.from(skills)
-  };
+  } catch (e) {
+    console.error("Error parsing badges:", e);
+  }
+  
+  try {
+    if (certRes.ok) {
+      const certData = await certRes.json();
+      certificates = certData.models || [];
+    }
+  } catch (e) {
+    console.error("Error parsing certificates:", e);
+  }
+  
+  return { badges, certificates };
 }
 
-function buildSvg(username, parsed) {
-  const badges = parsed.badges || [];
-  const certificates = parsed.certificates || [];
-  const skills = parsed.skills || [];
+function getBadgeColor(badge) {
+  const name = (badge.badge_name || badge.name || "").toLowerCase();
+  const stars = badge.star_count || 0;
+  
+  if (name.includes('sql') || name.includes('database')) return 'hex-purple';
+  if (name.includes('python')) return 'hex-blue';
+  if (name.includes('java') && !name.includes('javascript')) return 'hex-orange';
+  if (name.includes('javascript') || name.includes('react')) return 'hex-green';
+  if (name.includes('c++') || name.includes('cpp') || name.includes('c ')) return 'hex-silver';
+  if (name.includes('problem solving')) return 'hex-gold';
+  if (stars >= 4) return 'hex-gold';
+  if (stars >= 3) return 'hex-silver';
+  if (stars >= 1) return 'hex-bronze';
+  
+  return 'hex-gold';
+}
+
+function getCertColor(cert) {
+  const name = (cert.certificate_name || cert.name || "").toLowerCase();
+  
+  if (name.includes('frontend') || name.includes('react') || name.includes('angular')) return 'cert-blue';
+  if (name.includes('software') || name.includes('engineer')) return 'cert-purple';
+  if (name.includes('sql') || name.includes('database')) return 'cert-purple';
+  if (name.includes('java') && !name.includes('javascript')) return 'cert-orange';
+  
+  return 'cert-green';
+}
+
+function buildSvg(username, data) {
+  const badges = data.badges || [];
+  const certificates = data.certificates || [];
   const width = 900;
   const padding = 40;
   
@@ -141,10 +119,6 @@ function buildSvg(username, parsed) {
   svg += `\n      <stop offset="0%" style="stop-color:#39B54A;stop-opacity:1"/>`;
   svg += `\n      <stop offset="100%" style="stop-color:#2ECC71;stop-opacity:1"/>`;
   svg += `\n    </linearGradient>`;
-  svg += `\n    <filter id="glow">`;
-  svg += `\n      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>`;
-  svg += `\n      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>`;
-  svg += `\n    </filter>`;
   svg += `\n    <filter id="shadow">`;
   svg += `\n      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>`;
   svg += `\n    </filter>`;
@@ -168,6 +142,7 @@ function buildSvg(username, parsed) {
   svg += `\n    .hex-blue{fill:#5B9BD5}`;
   svg += `\n    .hex-green{fill:#70AD47}`;
   svg += `\n    .hex-purple{fill:#9B7EBD}`;
+  svg += `\n    .hex-orange{fill:#FF8C42}`;
   svg += `\n    .cert-green{fill:#39B54A}`;
   svg += `\n    .cert-blue{fill:#2E5CB8}`;
   svg += `\n    .cert-purple{fill:#7952B3}`;
@@ -180,9 +155,7 @@ function buildSvg(username, parsed) {
   svg += `\n  </style>`;
   
   svg += `\n  <rect width="100%" height="100%" class="bg"/>`;
-  
   svg += `\n  <rect y="0" width="100%" height="6" class="header-bar"/>`;
-  
   svg += `\n  <text x="${padding}" y="48" class="main-title">HackerRank Achievements</text>`;
   svg += `\n  <text x="${padding}" y="75" class="username">@${escapeHtml(username)}</text>`;
   
@@ -195,14 +168,20 @@ function buildSvg(username, parsed) {
   svg += `\n    <text x="0" y="0" class="stats-text">Certificates</text>`;
   svg += `\n    <text x="0" y="22" class="stats-num">${certificates.length}</text>`;
   svg += `\n  </g>`;
+  
+  const uniqueSkills = new Set();
+  badges.forEach(b => {
+    const name = (b.badge_name || b.name || "").replace(/\d+\s*star/gi, '').trim();
+    if (name) uniqueSkills.add(name);
+  });
+  
   svg += `\n  <g transform="translate(${statX + 240}, 35)">`;
   svg += `\n    <text x="0" y="0" class="stats-text">Skills</text>`;
-  svg += `\n    <text x="0" y="22" class="stats-num">${skills.length > 0 ? skills.length : badges.length}</text>`;
+  svg += `\n    <text x="0" y="22" class="stats-num">${uniqueSkills.size || badges.length}</text>`;
   svg += `\n  </g>`;
   
   if (badges.length > 0) {
     svg += `\n  <line x1="${padding}" y1="${currentY - 20}" x2="${width - padding}" y2="${currentY - 20}" class="divider"/>`;
-    
     svg += `\n  <text x="${padding}" y="${currentY + 10}" class="section-title">🏆 Badges</text>`;
     svg += `\n  <text x="${padding + 130}" y="${currentY + 10}" class="section-count">${badges.length} earned</text>`;
     currentY += 50;
@@ -213,33 +192,26 @@ function buildSvg(username, parsed) {
       const x = padding + col * (badgeSize + badgeGap) + 60;
       const y = currentY + row * (badgeSize + badgeGap + 35);
       
-      let hexClass = 'hex-gold';
-      const title = b.title.toLowerCase();
-      if (title.includes('sql') || title.includes('database')) hexClass = 'hex-purple';
-      else if (title.includes('python')) hexClass = 'hex-blue';
-      else if (title.includes('java') && !title.includes('javascript')) hexClass = 'hex-orange';
-      else if (title.includes('javascript') || title.includes('react')) hexClass = 'hex-green';
-      else if (title.includes('c++') || title.includes('cpp')) hexClass = 'hex-silver';
-      else if (title.includes('problem solving')) hexClass = 'hex-gold';
-      else if (b.stars >= 4) hexClass = 'hex-gold';
-      else if (b.stars >= 3) hexClass = 'hex-silver';
-      else if (b.stars >= 1) hexClass = 'hex-bronze';
+      const hexClass = getBadgeColor(b);
+      const badgeUrl = b.badge_url || b.url || '';
+      const stars = b.star_count || 0;
+      const badgeName = b.badge_name || b.name || 'Badge';
       
       svg += `\n  <g transform="translate(${x - 60}, ${y})">`;
       svg += `\n    <path d="M 60 5 L 112 35 L 112 95 L 60 125 L 8 95 L 8 35 Z" class="${hexClass}" filter="url(#shadow)"/>`;
       
-      if (b.image) {
-        svg += `\n    <image x="0" y="0" width="120" height="130" href="${escapeHtml(b.image)}" clip-path="url(#hexClip)" preserveAspectRatio="xMidYMid slice"/>`;
+      if (badgeUrl) {
+        svg += `\n    <image x="0" y="0" width="120" height="130" href="${escapeHtml(badgeUrl)}" clip-path="url(#hexClip)" preserveAspectRatio="xMidYMid slice"/>`;
       }
       
-      if (b.stars > 0) {
-        svg += `\n    <text x="60" y="145" class="badge-stars">${'⭐'.repeat(Math.min(b.stars, 5))}</text>`;
+      if (stars > 0) {
+        svg += `\n    <text x="60" y="145" class="badge-stars">${'⭐'.repeat(Math.min(stars, 5))}</text>`;
       }
       svg += `\n  </g>`;
       
-      const nameParts = b.title.replace(/\d+\s*star/gi, '').trim().split(' ');
+      const nameParts = badgeName.replace(/\d+\s*star/gi, '').trim().split(' ');
       const line1 = nameParts.slice(0, 2).join(' ');
-      const line2 = nameParts.slice(2).join(' ');
+      const line2 = nameParts.slice(2, 4).join(' ');
       
       if (line1) svg += `\n  <text x="${x}" y="${y + 148}" class="badge-name">${escapeHtml(line1.substring(0, 15))}</text>`;
       if (line2) svg += `\n  <text x="${x}" y="${y + 160}" class="badge-name">${escapeHtml(line2.substring(0, 15))}</text>`;
@@ -250,7 +222,6 @@ function buildSvg(username, parsed) {
   
   if (certificates.length > 0) {
     svg += `\n  <line x1="${padding}" y1="${currentY - 20}" x2="${width - padding}" y2="${currentY - 20}" class="divider"/>`;
-    
     svg += `\n  <text x="${padding}" y="${currentY + 10}" class="section-title">📜 Certifications</text>`;
     svg += `\n  <text x="${padding + 210}" y="${currentY + 10}" class="section-count">${certificates.length} verified</text>`;
     currentY += 50;
@@ -261,12 +232,9 @@ function buildSvg(username, parsed) {
       const x = padding + col * (certCardWidth + certGap);
       const y = currentY + row * (certCardHeight + certGap);
       
-      let cardClass = 'cert-green';
-      const title = c.title.toLowerCase();
-      if (title.includes('frontend') || title.includes('react') || title.includes('angular')) cardClass = 'cert-blue';
-      else if (title.includes('software') || title.includes('engineer')) cardClass = 'cert-purple';
-      else if (title.includes('sql') || title.includes('database')) cardClass = 'cert-purple';
-      else if (title.includes('java') && !title.includes('javascript')) cardClass = 'cert-orange';
+      const cardClass = getCertColor(c);
+      const certName = c.certificate_name || c.name || 'Certificate';
+      const certType = (c.category || 'SKILL').toUpperCase();
       
       svg += `\n  <g filter="url(#shadow)">`;
       svg += `\n    <rect x="${x}" y="${y}" width="${certCardWidth}" height="${certCardHeight}" rx="8" class="${cardClass}"/>`;
@@ -277,12 +245,12 @@ function buildSvg(username, parsed) {
       svg += `\n    <circle cx="${x + 25}" cy="${y + 20}" r="3" fill="white"/>`;
       svg += `\n    <rect x="${x + 17}" y="${y + 36}" width="16" height="2" rx="1" fill="white"/>`;
       
-      const certLines = c.title.match(/.{1,22}/g) || [c.title];
+      const certLines = certName.match(/.{1,22}/g) || [certName];
       certLines.slice(0, 2).forEach((line, idx) => {
         svg += `\n    <text x="${x + 15}" y="${y + 70 + idx * 18}" class="cert-title">${escapeHtml(line.trim())}</text>`;
       });
       
-      svg += `\n    <text x="${x + 15}" y="${y + 112}" class="cert-type">${escapeHtml(c.type)}</text>`;
+      svg += `\n    <text x="${x + 15}" y="${y + 112}" class="cert-type">${escapeHtml(certType)}</text>`;
       
       svg += `\n    <circle cx="${x + 15}" cy="${y + 127}" r="3" fill="rgba(255,255,255,0.9)"/>`;
       svg += `\n    <path d="M ${x + 13} ${y + 127} L ${x + 14.5} ${y + 128.5} L ${x + 17} ${y + 125.5}" stroke="${cardClass === 'cert-green' ? '#0A5C2E' : cardClass === 'cert-blue' ? '#1A3A6E' : '#4A2870'}" stroke-width="1.5" fill="none" stroke-linecap="round"/>`;
@@ -313,9 +281,8 @@ export default async function handler(req, res) {
       return res.status(200).send(cached.svg);
     }
 
-    const html = await fetchProfileHtml(username);
-    const parsed = parseBadgesAndCertificates(html);
-    const svg = buildSvg(username, parsed);
+    const data = await fetchProfileData(username);
+    const svg = buildSvg(username, data);
     cache.set(cacheKey, { ts: now, svg });
 
     res.setHeader("Content-Type", "image/svg+xml");
