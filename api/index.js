@@ -1,5 +1,4 @@
 const fetch = require("node-fetch");
-const cheerio = require("cheerio");
 
 const cache = new Map();
 const CACHE_TTL_MS = 1000 * 60 * 10;
@@ -14,74 +13,50 @@ function escapeHtml(s) {
 }
 
 async function fetchProfileData(username) {
-  const url = `https://www.hackerrank.com/rest/hackers/${encodeURIComponent(username)}/badges`;
-  const certUrl = `https://www.hackerrank.com/rest/hackers/${encodeURIComponent(username)}/certificates`;
+  const profileUrl = `https://www.hackerrank.com/rest/contests/master/hackers/${encodeURIComponent(username)}/profile`;
   
-  const [badgesRes, certRes] = await Promise.all([
-    fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
-      }
-    }),
-    fetch(certUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
-      }
-    })
-  ]);
-  
-  let badges = [];
-  let certificates = [];
-  
-  try {
-    if (badgesRes.ok) {
-      const badgesData = await badgesRes.json();
-      badges = badgesData.models || [];
+  const res = await fetch(profileUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Accept": "application/json"
     }
-  } catch (e) {
-    console.error("Error parsing badges:", e);
-  }
+  });
   
-  try {
-    if (certRes.ok) {
-      const certData = await certRes.json();
-      certificates = certData.models || [];
-    }
-  } catch (e) {
-    console.error("Error parsing certificates:", e);
-  }
+  if (!res.ok) throw new Error(`Profile not found (${res.status})`);
   
-  return { badges, certificates };
+  const data = await res.json();
+  const model = data.model || {};
+  
+  const badges = model.badges || [];
+  const certificates = model.certificates || [];
+  
+  return { badges, certificates, model };
 }
 
 function getBadgeColor(badge) {
-  const name = (badge.badge_name || badge.name || "").toLowerCase();
-  const stars = badge.star_count || 0;
+  const name = (badge.name || "").toLowerCase();
   
-  if (name.includes('sql') || name.includes('database')) return 'hex-purple';
-  if (name.includes('python')) return 'hex-blue';
-  if (name.includes('java') && !name.includes('javascript')) return 'hex-orange';
-  if (name.includes('javascript') || name.includes('react')) return 'hex-green';
-  if (name.includes('c++') || name.includes('cpp') || name.includes('c ')) return 'hex-silver';
-  if (name.includes('problem solving')) return 'hex-gold';
-  if (stars >= 4) return 'hex-gold';
-  if (stars >= 3) return 'hex-silver';
-  if (stars >= 1) return 'hex-bronze';
+  if (name.includes('sql') || name.includes('database')) return '#9B7EBD';
+  if (name.includes('python')) return '#5B9BD5';
+  if (name.includes('java') && !name.includes('javascript')) return '#FF8C42';
+  if (name.includes('javascript') || name.includes('react')) return '#70AD47';
+  if (name.includes('c++') || name.includes('cpp')) return '#C0C0D0';
+  if (name.includes('c ') || name.includes('c language')) return '#C0C0D0';
+  if (name.includes('problem solving')) return '#FDB714';
+  if (name.includes('10 days')) return '#E89B6E';
   
-  return 'hex-gold';
+  return '#FDB714';
 }
 
 function getCertColor(cert) {
-  const name = (cert.certificate_name || cert.name || "").toLowerCase();
+  const name = (cert.name || "").toLowerCase();
   
-  if (name.includes('frontend') || name.includes('react') || name.includes('angular')) return 'cert-blue';
-  if (name.includes('software') || name.includes('engineer')) return 'cert-purple';
-  if (name.includes('sql') || name.includes('database')) return 'cert-purple';
-  if (name.includes('java') && !name.includes('javascript')) return 'cert-orange';
+  if (name.includes('frontend') || name.includes('react') || name.includes('angular')) return '#2E5CB8';
+  if (name.includes('software engineer')) return '#7952B3';
+  if (name.includes('sql') || name.includes('database')) return '#7952B3';
+  if (name.includes('java') && !name.includes('javascript')) return '#FF6B35';
   
-  return 'cert-green';
+  return '#39B54A';
 }
 
 function buildSvg(username, data) {
@@ -119,35 +94,21 @@ function buildSvg(username, data) {
   svg += `\n      <stop offset="0%" style="stop-color:#39B54A;stop-opacity:1"/>`;
   svg += `\n      <stop offset="100%" style="stop-color:#2ECC71;stop-opacity:1"/>`;
   svg += `\n    </linearGradient>`;
-  svg += `\n    <filter id="shadow">`;
-  svg += `\n      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>`;
-  svg += `\n    </filter>`;
-  svg += `\n    <clipPath id="hexClip"><path d="M 60 5 L 112 35 L 112 95 L 60 125 L 8 95 L 8 35 Z"/></clipPath>`;
+  svg += `\n    <filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/></filter>`;
   svg += `\n  </defs>`;
   
   svg += `\n  <style>`;
   svg += `\n    .bg{fill:url(#bgGrad)}`;
   svg += `\n    .header-bar{fill:url(#headerGrad);filter:url(#shadow)}`;
-  svg += `\n    .main-title{font:700 32px -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;fill:#FFFFFF;letter-spacing:-0.5px}`;
-  svg += `\n    .username{font:600 18px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFFFFF;opacity:0.9}`;
-  svg += `\n    .stats-text{font:600 14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFFFFF;opacity:0.85}`;
+  svg += `\n    .main-title{font:700 32px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF;letter-spacing:-0.5px}`;
+  svg += `\n    .username{font:600 18px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF;opacity:0.9}`;
+  svg += `\n    .stats-text{font:600 14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF;opacity:0.85}`;
   svg += `\n    .stats-num{font:700 20px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#39B54A}`;
-  svg += `\n    .section-title{font:700 24px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFFFFF}`;
+  svg += `\n    .section-title{font:700 24px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF}`;
   svg += `\n    .section-count{font:600 16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#8B92A7}`;
-  svg += `\n    .badge-name{font:600 11px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFFFFF;text-anchor:middle}`;
+  svg += `\n    .badge-name{font:600 11px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF;text-anchor:middle}`;
   svg += `\n    .badge-stars{font:700 10px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFD700;text-anchor:middle}`;
-  svg += `\n    .hex-gold{fill:#FDB714}`;
-  svg += `\n    .hex-silver{fill:#C0C0D0}`;
-  svg += `\n    .hex-bronze{fill:#E89B6E}`;
-  svg += `\n    .hex-blue{fill:#5B9BD5}`;
-  svg += `\n    .hex-green{fill:#70AD47}`;
-  svg += `\n    .hex-purple{fill:#9B7EBD}`;
-  svg += `\n    .hex-orange{fill:#FF8C42}`;
-  svg += `\n    .cert-green{fill:#39B54A}`;
-  svg += `\n    .cert-blue{fill:#2E5CB8}`;
-  svg += `\n    .cert-purple{fill:#7952B3}`;
-  svg += `\n    .cert-orange{fill:#FF6B35}`;
-  svg += `\n    .cert-title{font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFFFFF}`;
+  svg += `\n    .cert-title{font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF}`;
   svg += `\n    .cert-type{font:600 10px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:0.5px}`;
   svg += `\n    .cert-verified{font:500 11px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:rgba(255,255,255,0.85)}`;
   svg += `\n    .fold{fill:rgba(255,255,255,0.12)}`;
@@ -171,7 +132,7 @@ function buildSvg(username, data) {
   
   const uniqueSkills = new Set();
   badges.forEach(b => {
-    const name = (b.badge_name || b.name || "").replace(/\d+\s*star/gi, '').trim();
+    const name = (b.name || "").replace(/\d+\s*star/gi, '').trim();
     if (name) uniqueSkills.add(name);
   });
   
@@ -192,16 +153,15 @@ function buildSvg(username, data) {
       const x = padding + col * (badgeSize + badgeGap) + 60;
       const y = currentY + row * (badgeSize + badgeGap + 35);
       
-      const hexClass = getBadgeColor(b);
-      const badgeUrl = b.badge_url || b.url || '';
-      const stars = b.star_count || 0;
-      const badgeName = b.badge_name || b.name || 'Badge';
+      const hexColor = getBadgeColor(b);
+      const badgeName = b.name || 'Badge';
+      const stars = b.stars_earned || 0;
       
       svg += `\n  <g transform="translate(${x - 60}, ${y})">`;
-      svg += `\n    <path d="M 60 5 L 112 35 L 112 95 L 60 125 L 8 95 L 8 35 Z" class="${hexClass}" filter="url(#shadow)"/>`;
+      svg += `\n    <path d="M 60 5 L 112 35 L 112 95 L 60 125 L 8 95 L 8 35 Z" fill="${hexColor}" filter="url(#shadow)"/>`;
       
-      if (badgeUrl) {
-        svg += `\n    <image x="0" y="0" width="120" height="130" href="${escapeHtml(badgeUrl)}" clip-path="url(#hexClip)" preserveAspectRatio="xMidYMid slice"/>`;
+      if (b.preview) {
+        svg += `\n    <image x="20" y="25" width="80" height="80" href="${escapeHtml(b.preview)}" preserveAspectRatio="xMidYMid meet"/>`;
       }
       
       if (stars > 0) {
@@ -232,12 +192,12 @@ function buildSvg(username, data) {
       const x = padding + col * (certCardWidth + certGap);
       const y = currentY + row * (certCardHeight + certGap);
       
-      const cardClass = getCertColor(c);
-      const certName = c.certificate_name || c.name || 'Certificate';
-      const certType = (c.category || 'SKILL').toUpperCase();
+      const cardColor = getCertColor(c);
+      const certName = c.name || 'Certificate';
+      const certType = (c.skill_name || c.name || 'SKILL').toUpperCase().substring(0, 20);
       
       svg += `\n  <g filter="url(#shadow)">`;
-      svg += `\n    <rect x="${x}" y="${y}" width="${certCardWidth}" height="${certCardHeight}" rx="8" class="${cardClass}"/>`;
+      svg += `\n    <rect x="${x}" y="${y}" width="${certCardWidth}" height="${certCardHeight}" rx="8" fill="${cardColor}"/>`;
       svg += `\n    <path d="M ${x + certCardWidth - 25} ${y} L ${x + certCardWidth} ${y} L ${x + certCardWidth} ${y + 25} Z" class="fold"/>`;
       
       svg += `\n    <circle cx="${x + 25}" cy="${y + 28}" r="16" fill="rgba(255,255,255,0.15)"/>`;
@@ -253,7 +213,7 @@ function buildSvg(username, data) {
       svg += `\n    <text x="${x + 15}" y="${y + 112}" class="cert-type">${escapeHtml(certType)}</text>`;
       
       svg += `\n    <circle cx="${x + 15}" cy="${y + 127}" r="3" fill="rgba(255,255,255,0.9)"/>`;
-      svg += `\n    <path d="M ${x + 13} ${y + 127} L ${x + 14.5} ${y + 128.5} L ${x + 17} ${y + 125.5}" stroke="${cardClass === 'cert-green' ? '#0A5C2E' : cardClass === 'cert-blue' ? '#1A3A6E' : '#4A2870'}" stroke-width="1.5" fill="none" stroke-linecap="round"/>`;
+      svg += `\n    <path d="M ${x + 13} ${y + 127} L ${x + 14.5} ${y + 128.5} L ${x + 17} ${y + 125.5}" stroke="${cardColor === '#39B54A' ? '#0A5C2E' : cardColor === '#2E5CB8' ? '#1A3A6E' : '#4A2870'}" stroke-width="1.5" fill="none" stroke-linecap="round"/>`;
       svg += `\n    <text x="${x + 23}" y="${y + 130}" class="cert-verified">Verified</text>`;
       svg += `\n  </g>`;
     });
@@ -290,7 +250,7 @@ export default async function handler(req, res) {
     return res.status(200).send(svg);
   } catch (err) {
     console.error("Error:", err.message);
-    const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="700" height="200"><defs><linearGradient id="errBg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1A1F3A"/><stop offset="100%" style="stop-color:#0A0E27"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#errBg)"/><rect y="0" width="100%" height="6" fill="#E74C3C"/><text x="30" y="70" style="font:700 28px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFFFFF">⚠️ Unable to Load Profile</text><text x="30" y="110" style="font:600 16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#E74C3C">${escapeHtml(err.message)}</text><text x="30" y="145" style="font:500 14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#8B92A7">Please verify the username and try again</text></svg>`;
+    const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="700" height="200"><defs><linearGradient id="errBg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1A1F3A"/><stop offset="100%" style="stop-color:#0A0E27"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#errBg)"/><rect y="0" width="100%" height="6" fill="#E74C3C"/><text x="30" y="70" style="font:700 28px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#FFF">⚠️ Unable to Load Profile</text><text x="30" y="110" style="font:600 16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#E74C3C">${escapeHtml(err.message)}</text><text x="30" y="145" style="font:500 14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#8B92A7">Please verify the username and try again</text></svg>`;
     res.setHeader("Content-Type", "image/svg+xml");
     return res.status(200).send(fallback);
   }
