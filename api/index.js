@@ -106,7 +106,7 @@ function buildSvg(username, parsed) {
   return svg;
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     const username = req.query.username || "";
     if (!username) {
@@ -140,4 +140,4 @@ module.exports = async (req, res) => {
     res.setHeader("Content-Type", "image/svg+xml");
     return res.status(200).send(fallback);
   }
-};
+}
