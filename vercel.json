@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "functions": {
-    "api/widget.js": {
-      "runtime": "nodejs18.x"
+  "builds": [
+    {
+      "src": "api/widget.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/api/widget",
