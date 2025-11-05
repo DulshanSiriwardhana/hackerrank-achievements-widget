@@ -4,5 +4,13 @@
   "main": "index.js",
   "repository": "git@github.com:DulshanSiriwardhana/hackerrank-achievements-widget.git",
   "author": "DulshanSiriwardhana <dulshansiriwardhana70@gmail.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "node-fetch": "^2.6.7"
+  }
 }

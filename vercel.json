@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/hr-widget.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/hr-widget",
+      "dest": "/api/hr-widget.js"
+    }
+  ]
+}
