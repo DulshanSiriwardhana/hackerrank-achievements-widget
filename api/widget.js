@@ -108,15 +108,19 @@ function buildSvg(username, parsed) {
 
 module.exports = async (req, res) => {
   try {
-    const username =
-      (req.query.username || (req.params && req.params.username) || "").trim();
-    if (!username) return res.status(400).send("Missing username ?username=");
+    const username = req.query.username || "";
+    if (!username) {
+      res.status(400);
+      res.setHeader("Content-Type", "text/plain");
+      return res.send("Missing username parameter. Use ?username=YOUR_USERNAME");
+    }
 
     const cacheKey = username.toLowerCase();
     const now = Date.now();
     const cached = cache.get(cacheKey);
     if (cached && now - cached.ts < CACHE_TTL_MS) {
       res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "public, max-age=600");
       return res.status(200).send(cached.svg);
     }
 
@@ -126,6 +130,7 @@ module.exports = async (req, res) => {
     cache.set(cacheKey, { ts: now, svg });
 
     res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "public, max-age=600");
     return res.status(200).send(svg);
   } catch (err) {
     console.error("hr-widget error:", err.message);
