@@ -1,0 +1,8 @@
+{
+  "name": "hackerrank-achievements-widget",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:DulshanSiriwardhana/hackerrank-achievements-widget.git",
+  "author": "DulshanSiriwardhana <dulshansiriwardhana70@gmail.com>",
+  "license": "MIT"
+}
